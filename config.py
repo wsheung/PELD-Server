@@ -1,13 +1,14 @@
 # -*- encoding: utf-8 -*-
 import datetime
 import logging
+import os
 
 # -----------------------------------------------------
 # Application configurations
 # ------------------------------------------------------
-SECRET_KEY = 'REPLACE_ME'
+SECRET_KEY = os.environ.get('SECRET_KEY', '')
 PORT = 5000
-HOST = 'REPLACE_ME'
+HOST = os.environ.get('SERVER_NAME', 'localhost')
 LOG_LEVEL = logging.WARNING
 
 # -----------------------------------------------------
@@ -18,11 +19,15 @@ MONGO_URI = 'mongodb://db:27017/peld'
 # -----------------------------------------------------
 # ESI Configs
 # -----------------------------------------------------
-ESI_SWAGGER_JSON = './app/swagger.json'
-ESI_SECRET_KEY = 'REPLACE_ME'  # your secret key
-ESI_CLIENT_ID = 'REPLACE_ME'  # your client ID
+# Set ESI_SECRET_KEY and ESI_CLIENT_ID in your .env file (never commit real credentials)
+ESI_SECRET_KEY = os.environ.get('ESI_SECRET_KEY', '')
+ESI_CLIENT_ID = os.environ.get('ESI_CLIENT_ID', '')
 ESI_CALLBACK = 'https://%s/sso/callback' % HOST
 ESI_USER_AGENT = 'peld-server by Demogorgon Asmodeous'
+ESI_BASE_URL = 'https://esi.evetech.net'
+EVE_TOKEN_URL = 'https://login.eveonline.com/v2/oauth/token'
+EVE_AUTH_URL = 'https://login.eveonline.com/v2/oauth/authorize'
+EVE_REVOKE_URL = 'https://login.eveonline.com/v2/oauth/revoke'
 
 # ------------------------------------------------------
 # Session settings for flask login

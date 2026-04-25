@@ -3,12 +3,25 @@
  sets up Flask, initializes all the modules needed, and registers the routes
 """
 
+import socket as _socket
+try:
+    _db_ip = _socket.gethostbyname('db')
+except _socket.gaierror:
+    _db_ip = 'db'
+_real_getaddrinfo = _socket.getaddrinfo
+
 import eventlet
 eventlet.monkey_patch()
+
+# Restore real blocking DNS resolver — eventlet's async greendns fails against
+# Docker's embedded DNS (127.0.0.11) on Windows/WSL2.
+import socket as _patched_socket
+_patched_socket.getaddrinfo = _real_getaddrinfo
 
 import pymongo
 
 import config
+config.MONGO_URI = config.MONGO_URI.replace('://db:', '://' + _db_ip + ':', 1)
 
 from flask import Flask
 
@@ -40,7 +53,7 @@ mongo.init_app(app)
 login_manager.init_app(app)
 
 # Initialize socket.io for socket handling
-socketio.init_app(app, message_queue="redis://"+config.REDIS_URL)
+socketio.init_app(app, message_queue="redis://"+config.REDIS_URL+":6379")
 
 # create indexes in database, runs on every startup to prevent manual db setup and ensure compliance
 with app.app_context():
@@ -52,7 +65,7 @@ with app.app_context():
     mongo.db.fleets.create_index('connected_clients')
     mongo.db.fleets.create_index('connected_webapps')
     mongo.db.fleets.create_index('id')
-    mongo.db.characters.update({}, {'$set': {'sid': []}}, multi=True)
+    mongo.db.characters.update_many({}, {'$set': {'sid': []}})
     # 'schema' updates for version upgrades
     doc = mongo.db.version.find_one({})
     if not doc:
@@ -60,7 +73,7 @@ with app.app_context():
     else:
         db_version = parse_version(doc['db_version'])
     #if parse_version('v1.1.0') > db_version:
-    mongo.db.version.update({}, {'$set': {'db_version': version}}, upsert=True)
+    mongo.db.version.update_one({}, {'$set': {'db_version': version}}, upsert=True)
 
 # Register all our blueprints (routes that come from other files)
 # this could theoretically be changed to mount the routes on other endpoints

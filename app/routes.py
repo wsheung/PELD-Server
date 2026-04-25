@@ -16,10 +16,9 @@ from flask_socketio import emit
 from app.user import User
 from app.flask_shared_modules import mongo
 from app.flask_shared_modules import socketio
-from app.flask_shared_modules import esiapp
-from app.flask_shared_modules import esiclient
+from app import esi
 from app.routes_helpers import (add_db_sid, authenticated_only, update_token, EsiException,
-                                id_from_name, EsiError, remove_db_sid, emit_to_char )
+                                id_from_name, EsiError, remove_db_sid, emit_to_char)
 from app.background_fleet import (background_fleet, update_fleet_metadata)
 from app.version import version
 
@@ -76,16 +75,11 @@ def handle_client_disconnect():
 @authenticated_only
 def handle_kick(_id):
     update_token(current_user)
-    op = esiapp.op['delete_fleets_fleet_id_members_member_id'](
-        member_id=_id,
-        fleet_id=current_user.get_fleet_id()
-    )
-    request = esiclient.request(op)
-    if request.status != 204:
-        error_string = request.data['error'] if request.data else str(request.status)
-        logging.error('error performing kick for %s', _id)
-        logging.error('error is: %s', error_string)
-        emit('error', error_string)
+    try:
+        esi.delete_fleet_member(current_user.get_fleet_id(), _id, current_user.access_token)
+    except (EsiError, EsiException) as e:
+        logging.error('error performing kick for %s: %s', _id, e)
+        emit('error', str(e))
         return
     emit('info', 'member kicked')
 
@@ -98,17 +92,11 @@ def handle_move(info):
     if info['wing'] > 0:
         movement['wing_id'] = info['wing']
     update_token(current_user)
-    op = esiapp.op['put_fleets_fleet_id_members_member_id'](
-        member_id=info['id'],
-        fleet_id=current_user.get_fleet_id(),
-        movement=movement
-    )
-    request = esiclient.request(op)
-    if request.status != 204:
-        error_string = request.data['error'] if request.data else str(request.status)
-        logging.error('error performing move for %s', info['id'])
-        logging.error('error is: %s', error_string)
-        emit('error', error_string)
+    try:
+        esi.put_fleet_member(current_user.get_fleet_id(), info['id'], movement, current_user.access_token)
+    except (EsiError, EsiException) as e:
+        logging.error('error performing move for %s: %s', info['id'], e)
+        emit('error', str(e))
         return
     emit('info', info['name']+' moved to '+info['role'])
 

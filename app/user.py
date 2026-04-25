@@ -8,8 +8,6 @@ from flask_login.mixins import UserMixin
 from datetime import datetime
 from datetime import timedelta
 
-datetime_format = "%Y-%m-%dT%X"
-
 class User(UserMixin):
     def __init__(self, character_id=None, character_data=None, auth_response=None, mongo=None):
         super().__init__()
@@ -24,8 +22,7 @@ class User(UserMixin):
             data_to_update['id'] = character_data['CharacterID']
             data_to_update['name'] = character_data['CharacterName']
             character_filter = {'id': character_data['CharacterID']}
-            auth_response['access_token_expires'] = datetime.strptime(character_data['ExpiresOn'], datetime_format)
-            auth_response.pop('expires_in')
+            auth_response['access_token_expires'] = datetime.utcnow() + timedelta(seconds=auth_response['expires_in'])
             data_to_update['tokens'] = auth_response
             if 'Scopes' not in character_data:
                 data_to_update['scopes'] = ''

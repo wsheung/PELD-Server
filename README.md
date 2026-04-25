@@ -10,6 +10,23 @@ This allows FCs to see what is happening to their fleet, and whom/what their fle
 
 If you wish to deploy your own version of this site, it is highly recommended to use Docker to deploy it rather than trying to do it yourself.  To read about how to do that, go [here](https://github.com/ArtificialQualia/PELD-Server/wiki/Deployment).  If you don't want to use Docker, glhf.
 
+### Configuration
+
+Before running, create a `.env` file in the project root with the following variables:
+
+```
+SERVER_NAME=your.domain.com
+SECRET_KEY=<random hex string, e.g. from: python3 -c "import secrets; print(secrets.token_hex(32))">
+ESI_CLIENT_ID=your_eve_sso_client_id
+ESI_SECRET_KEY=your_eve_sso_secret_key
+```
+
+- **SERVER_NAME** — the hostname nginx will serve and where Let's Encrypt certificates are expected under `/etc/letsencrypt/live/<SERVER_NAME>/`
+- **SECRET_KEY** — Flask session signing key; must be a strong random secret unique to your deployment
+- **ESI_CLIENT_ID** / **ESI_SECRET_KEY** — credentials from your [EVE Online developer application](https://developers.eveonline.com/). Set the callback URL to `https://<SERVER_NAME>/sso/callback`
+
+The `.env` file is gitignored and never committed — keep your credentials out of version control.
+
 ## Problems?  Feedback?
 
 If you encounter any bugs or you think there are missing features please let me know [on the issues page](https://github.com/ArtificialQualia/PELD-Server/issues).

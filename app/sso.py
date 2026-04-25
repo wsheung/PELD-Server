@@ -2,8 +2,7 @@
  Flask blueprint to handle logins/logouts and related for EVE SSO
 """
 
-from esipy.exceptions import APIException
-from requests.exceptions import ConnectionError
+from requests.exceptions import ConnectionError, HTTPError
 
 from flask import request
 from flask import session
@@ -23,10 +22,10 @@ import hmac
 import logging
 
 import config
+from app import esi
 from app.user import User
 from app.flask_shared_modules import login_manager
 from app.flask_shared_modules import mongo
-from app.flask_shared_modules import esisecurity
 
 sso_pages = Blueprint('sso_pages', __name__)
 
@@ -56,7 +55,7 @@ def login():
             session[key] = request.args[key]
         else:
             scopes.append(request.args.get(key))
-    return redirect(esisecurity.get_auth_uri(
+    return redirect(esi.get_auth_uri(
         scopes=scopes,
         state=token,
     ))
@@ -64,9 +63,7 @@ def login():
 @sso_pages.route('/sso/logout')
 @login_required
 def logout():
-    sso_data = current_user.get_sso_data()
-    esisecurity.update_token(sso_data)
-    esisecurity.revoke()
+    esi.revoke_token(current_user.access_token)
     logout_user()
     return redirect(url_for("main_pages.index"))
 
@@ -87,26 +84,26 @@ def callback():
 
     # now we try to get tokens
     try:
-        auth_response = esisecurity.auth(code)
-    except APIException as e:
+        auth_response = esi.exchange_code(code)
+    except HTTPError as e:
         return render_template("error.html", error='Login EVE Online SSO failed: %s' % e)
     except ConnectionError as e:
         return render_template("error.html", error='Login EVE Online SSO failed: %s' % e)
 
     # the character information is retrieved
-    cdata = esisecurity.verify()
-    
+    cdata = esi.decode_jwt(auth_response['access_token'])
+
     if 'character_name' in session:
         character_name = session.pop('character_name')
         if cdata['CharacterName'] != character_name:
             return render_template("error.html", error="ERROR: Your character name in PELD (" + character_name +
-                                   ") does not match the character you logged in via ESI (" + cdata['CharacterName'] + 
+                                   ") does not match the character you logged in via ESI (" + cdata['CharacterName'] +
                                    "). Please go back to PELD and try again.")
 
     # if the user is already authed, they are logged out
     if current_user.is_authenticated:
         logout_user()
-    
+
     # create a user object from custom User class
     user = User(character_data=cdata, auth_response=auth_response, mongo=mongo)
     if 'socket_guid' in session:

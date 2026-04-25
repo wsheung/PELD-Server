@@ -5,6 +5,12 @@
 templates/js/node_modules
 templates/webpack*
 
+# Local dev only
+db/
+.claude/
+docker-compose.override.yml
+nginx-dev.conf.template
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

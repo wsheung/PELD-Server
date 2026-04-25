@@ -31,7 +31,7 @@ export var settingsRef = React.createRef();
 
 if (window.location.pathname.split('/')[1] == 'app') {
   socket = io()
-  socket.on('reconnect', (attemptNumber) => {
+  socket.io.on('reconnect', (attemptNumber) => {
     socket.sendBuffer = [];
     socket.emit('register_fleet_handler');
   });

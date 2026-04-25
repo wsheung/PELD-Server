@@ -8,15 +8,13 @@ from flask_socketio import disconnect
 
 from app.flask_shared_modules import mongo
 from app.flask_shared_modules import socketio
-from app.flask_shared_modules import esiapp
-from app.flask_shared_modules import esiclient
-from app.flask_shared_modules import esisecurity
+from app import esi
+from app.esi import EsiError, EsiException
 
 from requests import exceptions
 from pymongo import ReturnDocument
 
 import logging
-import pyswagger
 import functools
 
 
@@ -40,13 +38,6 @@ def emit_to_char(emit_type, data, sids=None, char_id=None, namespace=None):
     for sid in sids:
         socketio.emit(emit_type, data, room=sid, namespace=namespace)
 
-def json_serial(obj):
-    """JSON serializer for objects not serializable by default json code"""
-
-    if isinstance(obj, pyswagger.primitives._time.Datetime):
-        return obj.to_json()
-    raise TypeError ("Type %s not serializable" % type(obj))
-
 def decode_fleet_member(member):
     member['character_name'] = decode_character_id(member['character_id'])
     member['ship_name'] = decode_ship_id(member['ship_type_id'])
@@ -63,66 +54,55 @@ def id_from_name(_name):
     result = mongo.db.entities.find_one(id_filter)
     if result is not None:
         return result['id']
-    op = esiapp.op['post_universe_ids'](
-        names=[_name]
-    )
-    request = esiclient.request(op)
     try:
-        esi_error_check_basic(request, 'ship data', str(_name))
+        data = esi.get_universe_ids([_name])
     except EsiError:
         return 0
-    if ('inventory_types' in request.data):
-        add_db_entity(request.data['inventory_types'][0]['id'], _name)
-        return request.data['inventory_types'][0]['id']
-    else:
-        add_db_entity(-1, _name)
-        return -1
+    if 'inventory_types' in data and data['inventory_types']:
+        _id = data['inventory_types'][0]['id']
+        add_db_entity(_id, _name)
+        return _id
+    add_db_entity(-1, _name)
+    return -1
 
 def decode_character_id(_id):
     id_filter = {'id': _id}
     result = mongo.db.entities.find_one(id_filter)
     if result is not None:
         return result['name']
-    op = esiapp.op['get_characters_character_id'](
-        character_id=_id
-    )
-    request = esiclient.request(op)
-    esi_error_check_basic(request, 'public character data', str(_id))
-    add_db_entity(_id, request.data['name'])
-    return request.data['name']
+    try:
+        data = esi.get_universe_names([_id])
+        name = data[0]['name']
+    except (EsiError, EsiException, IndexError):
+        return str(_id)
+    add_db_entity(_id, name)
+    return name
 
 def decode_ship_id(_id):
     id_filter = {'id': _id}
     result = mongo.db.entities.find_one(id_filter)
     if result is not None:
         return result['name']
-    op = esiapp.op['get_universe_types_type_id'](
-        type_id=_id
-    )
-    request = esiclient.request(op)
-    esi_error_check_basic(request, 'ship data', str(_id))
-    add_db_entity(_id, request.data['name'])
-    return request.data['name']
+    try:
+        data = esi.get_universe_names([_id])
+        name = data[0]['name']
+    except (EsiError, EsiException, IndexError):
+        return str(_id)
+    add_db_entity(_id, name)
+    return name
 
 def decode_system_id(_id):
     id_filter = {'id': _id}
     result = mongo.db.entities.find_one(id_filter)
     if result is not None:
         return result['name']
-    op = esiapp.op['get_universe_systems_system_id'](
-        system_id=_id
-    )
-    request = esiclient.request(op)
-    esi_error_check_basic(request, 'system data', str(_id))
-    add_db_entity(_id, request.data['name'])
-    return request.data['name']
-
-def esi_error_check_basic(request, _type, entity):
-    if request.status != 200:
-        error_string = request.data['error'] if request.data else str(request.status)
-        logging.error('error getting ' + _type + ' for: ' + entity)
-        logging.error('error is: %s', error_string)
-        raise EsiError(error_string)
+    try:
+        data = esi.get_universe_names([_id])
+        name = data[0]['name']
+    except (EsiError, EsiException, IndexError):
+        return str(_id)
+    add_db_entity(_id, name)
+    return name
 
 def add_db_sid(_id, sid):
     _filter = {'id': _id}
@@ -155,10 +135,9 @@ def add_db_entity(_id, name):
 
 def update_token(current_user):
     sso_data = current_user.get_sso_data()
-    esisecurity.update_token(sso_data)
     if sso_data['expires_in'] <= 10:
         try:
-            tokens = esisecurity.refresh()
+            tokens = esi.refresh_access_token(current_user.refresh_token)
         except exceptions.SSLError:
             logging.error('ssl error refreshing token for: %s', current_user.get_id())
             raise EsiError('ssl error refreshing token')
@@ -168,9 +147,3 @@ def update_token(current_user):
             raise EsiError(e)
         current_user.update_token(tokens)
     return True
-
-class EsiError(Exception):
-    pass
-
-class EsiException(Exception):
-    pass
